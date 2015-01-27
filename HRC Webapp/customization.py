@@ -6,7 +6,7 @@ Contact: ma56nin@hotmail.com
 
 import sys
 
-version = "V 0.1"
+version = "V 0.9"
 
 def create_mod_file():
     m = open("mod_list.txt", 'w')
@@ -48,6 +48,10 @@ def open_files():
         print("File successfully created with default clean verdicts.")
         c = open("clean_keywords.txt",'r')
         
+    mods_of_HRC = []
+    ban_verdicts = []
+    clean_verdicts = []
+    
     for mline in m:
         if mline[0] != "#":
             mods_of_HRC.append(mline.rstrip('\n'))
@@ -61,6 +65,8 @@ def open_files():
     m.close()
     b.close()
     c.close()
+    
+    return mods_of_HRC, ban_verdicts, clean_verdicts
     
 def add_to_database():
     try:
@@ -77,7 +83,3 @@ def add_to_database():
         report_list[i] = report_list[i].strip("\n")
         report_list[i] = report_list[i].split("\t")
     
-mods_of_HRC = []
-ban_verdicts = []
-clean_verdicts = []
-open_files()

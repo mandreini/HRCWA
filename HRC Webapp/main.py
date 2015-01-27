@@ -11,33 +11,42 @@ except:
     exit
 import customization
 import time   
-import web
-import sql
+import datetime
 import sqlite3
-from sql import index #needed to make the webapp work, ignore spyder
+import sql
 import manual_edit
+import features
             
 def start_log(): #infinite loop, runs main() every minute
-    tmin = time.gmtime()[4]
+    t = time.gmtime()
     while True:
-        if time.gmtime()[4] != tmin:
+        if time.gmtime()[4] != t[4]:
             add_new_reports(manual_edit.indiv_report())
             main()
-            start_log()          
+            start_log()
+        if time.gmtime()[1] != t[2]:
+            pass
+            #refresh month database
+            #update player/mod activity log
+        if time.gmtime()[3] != t[3]:
+            pass
+            #refresh day and week database
 
 def add_new_reports(new_reports):
+    #input: list of strings directly inputted ("Reporter IGN verdict day-month-year")
     for n in new_reports:
         try:
+            n = n.strip("\n")
+            n = n.strip(" ")
+            today = datetime.datetime.today()
+            date = [today.year, today.month, today.day]
             new_rep = n.split(" ")
-            new_rep[3] = new_rep[4].split("-")
-            new_rep[3] = [int(new_rep[3][d] for d in range(3))] #convert date to integers
-            if new_rep[3][2].find("\n") != -1:
-                new_rep[3][2].split("\n")
-            print(new_rep)
+            new_rep += [date, "Unknown"]
             write_report(new_rep)
-            determine_dict(new_rep)            
+            determine_dict(new_rep)
+            print("Report added successfully!")            
         except:
-            print("The report '" + n + "' was not compatible. Please recheck the spacings on it")
+            print("The report '" + n + "' was not compatible. Please recheck the syntaxing")
             
 def main(): #extract the skype logs
     for c in skype.BookmarkedChats:
@@ -50,13 +59,17 @@ def main(): #extract the skype logs
                 log(new_messages,Running_list[c.Topic]) #reverse of new_messages not needed
 
 def log(new_messages,LIST): #log the report
+    #input: new_messages = [<SkypeMessage1>,...]; LIST = All messages of Running_list for the chat
     print("New message to log")
     for line in new_messages: 
-        if is_copied(line.Body)[0]:
-            customization.open_files() #allows dynamic change of mod lists
-            find_handle(line,LIST,is_copied(line.Body)[1])   
+        msg = line.Body.encode("utf-8")
+        print msg
+        if is_copied(msg)[0]:
+            mods,bans,cleans = customization.open_files() #allows dynamic change of mod lists
+            find_handle(line,LIST,is_copied(msg)[1])   
 
 def is_copied(message): #checks for the copy syntaxing - triple-checked, needs mac checking
+    #message: <SkypeMesage>
     if len(message) >= 14:
         if (message[0] == "[" and message.find("]",6,13) != -1 and (message[3] == ":" or message[2] == ":")): #PC test
             return [True,False]
@@ -65,7 +78,8 @@ def is_copied(message): #checks for the copy syntaxing - triple-checked, needs m
     return [False,False] #[is_copied,is_a_mac]
 
 def find_handle(Chat,LIST,mac): #generate info to create a report
-    message = Chat.Body
+    #inputs: Chat: <Skypechatobject>, LIST: list of all messages for chat, mac: boolean: is a mac quote (if True)
+    message = Chat.Body.encode("utf-8")
     if mac:
         IGN = message[message.find("\r\n")+4:message.rfind("\r\n")-1]
         verdict = message[message.rfind("\r\n")+2:]
@@ -74,54 +88,64 @@ def find_handle(Chat,LIST,mac): #generate info to create a report
         IGN = message[message.find(":",8)+2:message.find("\r\n\r\n")]
         verdict = message[message.rfind("<<<")+4:]
         Fname = message[message.find("]")+2:message.find(":",message.find("]")+2)] #to triple check report
-#uncomment following 2 lines, fix the latter
-#    while verdict == "": #check
-#        verdict = Running_list[Running_list[Chat.Topic].index(Chat)+1].Body
-    for ch in LIST:
-        if ch.Body.find(IGN) != -1 and not is_copied(ch.Body)[0]: #IGN loction that isn't the verdict
+    
+    print "finding handle for " + Fname + "'s report of " + IGN
+    
+    for ch in LIST[:50]: #won't go 50 messages back!
+        if ch.Body.encode("utf-8").find(IGN) != -1 and not is_copied(ch.Body.encode("utf-8"))[0]: #IGN loction that isn't the verdict
         #If there is a guy with the same name, take his handle. If not, take all handles where needed
             if ch.Sender.FullName == Fname: 
                 create_report(ch.Sender.FullName,IGN,verdict,ch,Chat)
             else: #check if proper indentation/improvement
-                for new_ch in LIST:
+                for new_ch in LIST[:50]:
                     if new_ch.Body.find(IGN) != -1:
-                        if not is_copied(new_ch.Body):             
+                        if not is_copied(new_ch.Body.encode("utf-8")):             
                             create_report(ch.Sender.Fullname,IGN,verdict,ch,Chat)
                             #differentiate between mod and player ch/Chat
                        
 def create_report(Reporter,IGN,verdict,ch,Chat): #create report to log    
+    #string, string, string, chatmessage of mod-who-banned, chatmessage of reporter
+    print "creating report for " + Reporter + "'s report of " + IGN
+    print "report created by " + Chat.Sender.Handle
+    onSdb = features.get_oldSkype_newSkype("oldnewskype_layover.txt") #oldnewSkypedatabase
+    Reporter = features.check_for_new(Reporter,onSdb) #Reporter will be current skype 
     old_report_info = "" #to remove duplicates
-    for mod in mods:
-        if Chat.Sender.Handle == mod:
-            date = [ch.Datetime.year,ch.Datetime.month,ch.Datetime.day]
-            report_info = [ch.Sender.Handle,IGN,verdict.lower(),Chat.Sender.Handle]
-            Info = report_info + [date] #date should be its own list inside of info
-            if report_info != old_report_info:                
-                old_report_info = report_info
-                write_report(Info)
-                determine_dict(Info) #check if should be indented
+    if Chat.Sender.Handle in mods:
+        date = [ch.Datetime.year,ch.Datetime.month,ch.Datetime.day]
+        report_info = [ch.Sender.Handle,IGN,verdict.lower(),"*",Chat.Sender.Handle]
+        Info = report_info; Info[3] = date #date should be its own list inside of info
+        total_records.append(Info)
+        if report_info != old_report_info:                
+            old_report_info = report_info
+            write_report(Info)
+            determine_dict(Info)
+                
             
 def write_report(report): #allows you to start the process, then terminate and restart it (i.e. update) without anything (or much)
-    print("Writing report to local record")
+    #input report: [<reporter>, <IGN>, <verdict>, <date in [yyyy,mm,dd]>, <mod-who-banned>]
+    print "writing report"
     my_reports.append(report)
-    b = open("reports_record.txt","r+")
+    b = open("reports_record.dat","r+")
     b.readlines()
-    b.write('\n'+str(report[0])+"\t"+str(report[1])+"\t"+str(report[2])+"\t"+str(report[4][2])+"-"+str(report[4][1])+"-"+str(report[4][0]))
+    b.write('\n'+str(report[0])+"\t"+str(report[1])+"\t"+str(report[2])+"\t"+str(report[3][2])+"-"+str(report[3][1])+"-"+str(report[3][0])+"\t"+report[4])
     b.close()
 
 def determine_dict(report):
+    print "determining dictionary"
+    #same as write_report()'s
     add_to_dict(all_time_reports,report)
-#    ddif = (datetime.date(report[3][2],report[3][1],report[3][0]) - datetime.date.today()).days
-#    if ddif < 0:
-#        ddif *= -1 #idk why it does that...
-#    if ddif == 1:
-#        add_to_dict(current_day_reports,report)
-#    if ddif <= 7:
-#        add_to_dict(this_week_reports,report)
-#    if ddif <= 30:
-#        add_to_dict(last_month_reports,report)
+    ddif = (datetime.date(report[3][0],report[3][1],report[3][2]) - datetime.date.today()).days
+    if ddif < 0:
+        ddif *= -1 #idk why it does that...
+    if ddif == 0:
+        add_to_dict(current_day_reports,report)
+    if ddif <= 7:
+        add_to_dict(this_week_reports,report)
+    if ddif <= 30:
+        add_to_dict(last_month_reports,report)
         
 def add_to_dict(dictionary,report):
+    #inputs: dictionary - which dictionary to add, find out report
     print("Adding to dictionary for SQLite3 database")
     if not dictionary.has_key(report[0]):
         dictionary[report[0]] = [0,0,0]
@@ -138,14 +162,19 @@ def add_to_dict(dictionary,report):
             if report[2].find(clean) != -1:
                 dictionary[report[0]][1] += 1
                 update_database(dictionary,report[0],"Clean")
-                return 
+                return
                 
 def update_database(table_dict,rep_name,verdict): #add the report to the database
-    print("Updating SQLite3 database")
-    if table_dict == all_time_reports: #to allow for different tables
-        table = "all_time"
-    else:
-        table = "all_time"
+    #table_dict: which database to update, string, string
+    if table_dict["name"] == sql.tables[0]: #to allow for different tables
+        table = sql.tables[0]
+    elif table_dict["name"] == sql.tables[1]:
+        table = sql.tables[1]
+    elif table_dict["name"] == sql.tables[2]:
+        table = sql.tables[2]
+    elif table_dict["name"] == sql.tables[3]:
+        table = sql.tables[3]
+    
     conn = sqlite3.connect("HRC_records.db")
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM " + table + " WHERE Reporter = ?",(rep_name,))
@@ -168,34 +197,34 @@ skype.Attach()
 print("Successfully connected to Skype account '" + Skype4Py.Skype.User(skype).Handle + "'.")
 
 #set up report structure
-all_time_reports = {} #place to store all reports; #records: {Reporter_skype_handle: [bans, clean, reports], ... }; will need to change
-last_month_reports = {} #same as all_time, but only past 30 days
-this_week_reports = {} #same as all_time, but only past 7 days
-current_day_reports = {} #same as all_time, but only today
+all_time_reports = {"name": sql.tables[0]} #place to store all reports; #records: {Reporter_skype_handle: [bans, clean, reports], ... }; will need to change
+last_month_reports = {"name": sql.tables[1]} #same as all_time, but only past 30 days
+this_week_reports = {"name": sql.tables[2]} #same as all_time, but only past 7 days
+current_day_reports = {"name": sql.tables[3]} #same as all_time, but only today
 Running_list = {} #the growing list for the chats, key is "u'<Topic>'"
 chat_list = [] #to know which chats are being logged
-total_records = [] #[[<reporter>, <IGN>, <verdict>, [dd,mm,yyy]], ... ]
+total_records = [] #[[<reporter>, <IGN>, <verdict>, <mod_who_banned>, [dd,mm,yyy]], ... ]
 name_list = [] #to get the id for updating the database
-mods = customization.mods_of_HRC
-bans = customization.ban_verdicts
-cleans=customization.clean_verdicts
+mods, bans, cleans = customization.open_files()
 
 #setup the database
-web.config.debug = True
-sql.try_table()
+for t in sql.tables:
+    sql.try_table(t)
 my_reports = []
+
 #load old reports
 old_list = manual_edit.open_reports()
 for old_report in old_list:
     old_report[2] = old_report[2].lower()
     determine_dict(old_report)
  
-#create Running_list to compare Handles with
+#create Running_list to compare Handles with and name_list for activity tracking
 for b in skype.BookmarkedChats:
     if b.Topic[0:3] == "HRC": 
         chat_list.append(str(b.Topic))
         Running_list[b.Topic] = list(b.Messages) #used to find the IGN
-
+        name_list.append([str(b.Topic)] + list(b.Members))
+        
 print("Logging the reports from " + ', '.join(chat_list))
 
 start_log() #start!
